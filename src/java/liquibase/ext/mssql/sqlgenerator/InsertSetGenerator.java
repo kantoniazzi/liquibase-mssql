@@ -1,21 +1,24 @@
 package liquibase.ext.mssql.sqlgenerator;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import liquibase.database.Database;
 import liquibase.database.core.MSSQLDatabase;
+import liquibase.datatype.DataTypeFactory;
 import liquibase.exception.ValidationErrors;
 import liquibase.ext.mssql.statement.InsertSetStatementMSSQL;
+import liquibase.ext.mssql.statement.InsertStatementMSSQL;
+import liquibase.logging.LogFactory;
+import liquibase.logging.Logger;
 import liquibase.sql.Sql;
 import liquibase.sql.UnparsedSql;
 import liquibase.sqlgenerator.SqlGeneratorChain;
 import liquibase.statement.core.InsertSetStatement;
+import liquibase.statement.core.InsertStatement;
 
 public class InsertSetGenerator extends liquibase.sqlgenerator.core.InsertSetGenerator {
+    private Logger log = LogFactory.getLogger();
+
     public static final String IF_TABLE_HAS_IDENTITY_STATEMENT = "IF ((select objectproperty(\n"
                     + "            object_id(N'${schemaName}.${tableName}'),\n"
                     + "           'TableHasIdentity')) = 1)\n" + "\t${then}\n";
@@ -37,8 +40,11 @@ public class InsertSetGenerator extends liquibase.sqlgenerator.core.InsertSetGen
     @Override
     public Sql[] generateSql(InsertSetStatement statement, Database database, SqlGeneratorChain sqlGeneratorChain) {
         Boolean identityInsertEnabled = false;
+        String pkColumns = null;
+
         if (statement instanceof InsertSetStatementMSSQL) {
             identityInsertEnabled = ((InsertSetStatementMSSQL) statement).getIdentityInsertEnabled();
+            pkColumns = ((InsertSetStatementMSSQL) statement).getPkColumns();
         }
         if (identityInsertEnabled == null || !identityInsertEnabled) {
             return super.generateSql(statement, database, sqlGeneratorChain);
@@ -52,10 +58,62 @@ public class InsertSetGenerator extends liquibase.sqlgenerator.core.InsertSetGen
         String safelyDisableIdentityInsert = ifTableHasIdentityColumn(disableIdentityInsert, statement,
                         database.getDefaultSchemaName());
 
-        List<Sql> sql = new ArrayList<Sql>(Arrays.asList(sqlGeneratorChain.generateSql(statement, database)));
-        sql.add(0, new UnparsedSql(safelyEnableIdentityInsert));
+        String checkByPkColumns = ifHasPkColumns(statement, database, pkColumns);
+
+        List<Sql> sql = new ArrayList<Sql>();
+        sql.add(new UnparsedSql(safelyEnableIdentityInsert));
+
+        if (checkByPkColumns.length() > 0){
+            sql.add(new UnparsedSql(checkByPkColumns));
+        }
+
+        sql.addAll (Arrays.asList(sqlGeneratorChain.generateSql(statement, database)));
         sql.add(new UnparsedSql(safelyDisableIdentityInsert));
         return sql.toArray(new Sql[sql.size()]);
+    }
+
+    private String ifHasPkColumns(InsertSetStatement statementSet, Database database, String pkColumnsString) {
+        StringBuilder sb = new StringBuilder();
+
+        List<String> pkColumns = new ArrayList<String>();
+        if (pkColumnsString != null && pkColumnsString.length() > 0){
+            pkColumns = Arrays.asList(pkColumnsString.split(","));
+        }
+        InsertStatement statement = statementSet.getStatementsArray()[0];
+
+        //generate where condition
+        for (String pkColumn : pkColumns) {
+            log.info("pk field: "+pkColumn);
+            if (sb.length() > 0){
+                sb.append(" and ");
+            }
+            sb.append(pkColumn);
+
+            Object newValue = statement.getColumnValues().get(pkColumn);
+            if (newValue == null || newValue.toString().equalsIgnoreCase("NULL")) {
+                sb.append("is NULL");
+            } else if (newValue instanceof String && !looksLikeFunctionCall(((String) newValue), database)) {
+                sb.append(" = "+ DataTypeFactory.getInstance().fromObject(newValue, database).objectToSql(newValue, database));
+            } else if (newValue instanceof Date) {
+                sb.append(" = "+database.getDateLiteral(((Date) newValue)));
+            } else if (newValue instanceof Boolean) {
+                if (((Boolean) newValue)) {
+                    sb.append(" is "+DataTypeFactory.getInstance().getTrueBooleanValue(database));
+                } else {
+                    sb.append(" is "+DataTypeFactory.getInstance().getFalseBooleanValue(database));
+                }
+            }else {
+                sb.append(" = "+newValue);
+            }
+
+        }
+
+        if (sb.length() > 0) {
+            sb.insert(0,"IF NOT EXISTS (SELECT 1 FROM "+statement.getTableName()+" WHERE ");
+            sb.append(")");
+        }
+
+        return sb.toString();
     }
 
     private String ifTableHasIdentityColumn(String then, InsertSetStatement statement, String defaultSchemaName) {

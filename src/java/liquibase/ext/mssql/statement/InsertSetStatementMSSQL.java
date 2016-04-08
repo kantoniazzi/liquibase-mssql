@@ -7,17 +7,21 @@ public class InsertSetStatementMSSQL extends InsertSetStatement {
 
     private Boolean identityInsertEnabled;
 
-    public InsertSetStatementMSSQL(InsertSetStatement statement, Boolean identityInsertEnable) {
+    private String pkColumns;
+
+    public InsertSetStatementMSSQL(InsertSetStatement statement, Boolean identityInsertEnable, String pkColumns) {
         super(statement.getCatalogName(), statement.getSchemaName(), statement.getTableName());
         for (InsertStatement insertStatement : statement.getStatements()) {
             addInsertStatement(insertStatement);
         }
         this.identityInsertEnabled = identityInsertEnable;
+        this.pkColumns = pkColumns;
     }
 
-    public InsertSetStatementMSSQL(InsertSetStatement statement, Boolean identityInsertEnable, int batchSize) {
+    public InsertSetStatementMSSQL(InsertSetStatement statement, Boolean identityInsertEnable, String pkColumns, int batchSize) {
         super(statement.getCatalogName(), statement.getSchemaName(), statement.getTableName(), batchSize);
         this.identityInsertEnabled = identityInsertEnable;
+        this.pkColumns = pkColumns;
     }
 
     public Boolean getIdentityInsertEnabled() {
@@ -26,5 +30,13 @@ public class InsertSetStatementMSSQL extends InsertSetStatement {
 
     public void setIdentityInsertEnabled(Boolean identityInsertEnabled) {
         this.identityInsertEnabled = identityInsertEnabled;
+    }
+
+    public String getPkColumns() {
+        return pkColumns;
+    }
+
+    public void setPkColumns(String pkColumns) {
+        this.pkColumns = pkColumns;
     }
 }

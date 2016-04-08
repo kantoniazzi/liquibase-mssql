@@ -14,6 +14,8 @@ import liquibase.statement.core.InsertStatement;
 public class InsertDataChangeMSSQL extends liquibase.change.core.InsertDataChange {
     private Boolean identityInsertEnabled;
 
+    private String pkColumns;
+
     public Boolean getIdentityInsertEnabled() {
         return identityInsertEnabled;
     }
@@ -21,14 +23,22 @@ public class InsertDataChangeMSSQL extends liquibase.change.core.InsertDataChang
     public void setIdentityInsertEnabled(Boolean identityInsertEnabled) {
         this.identityInsertEnabled = identityInsertEnabled;
     }
-    
+
+    public String getPkColumns() {
+        return pkColumns;
+    }
+
+    public void setPkColumns(String pkColumns) {
+        this.pkColumns = pkColumns;
+    }
+
     @Override
     public SqlStatement[] generateStatements(Database database) {
         SqlStatement[] statements = super.generateStatements(database);
         List<SqlStatement> wrappedStatements = new ArrayList<SqlStatement>(statements.length);
         for (SqlStatement statement : statements) {
             if (statement instanceof InsertStatement) {
-                wrappedStatements.add(new InsertStatementMSSQL((InsertStatement) statement, identityInsertEnabled));
+                wrappedStatements.add(new InsertStatementMSSQL((InsertStatement) statement, identityInsertEnabled, pkColumns));
             } else {
                 wrappedStatements.add(statement);
             }

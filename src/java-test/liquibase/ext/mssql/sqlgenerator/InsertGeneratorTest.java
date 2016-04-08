@@ -17,7 +17,7 @@ public class InsertGeneratorTest {
         statement.addColumnValue("id", 1);
         statement.addColumnValue("name", "asdf");
         
-        statement = new InsertStatementMSSQL(statement, true);
+        statement = new InsertStatementMSSQL(statement, true, "id");
 
         Sql[] sql = SqlGeneratorFactory.getInstance().generateSql(statement, new MSSQLDatabase());
         assertEquals(3, sql.length);
